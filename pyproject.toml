@@ -1,0 +1,17 @@
+[project]
+name = "langraphprojects"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ddgs>=9.7.1",
+    "dotenv>=0.9.9",
+    "duckduckgo-search>=8.1.1",
+    "langchain>=1.0.3",
+    "langchain-mcp-adapters>=0.1.12",
+    "langchain-openai>=1.0.2",
+    "langgraph>=1.0.2",
+    "mcp>=1.20.0",
+    "typing>=3.10.0.0",
+]
