@@ -35,6 +35,20 @@ Run the MCP agent with calculator and weather services:
 python mcp_agent.py
 ```
 
+Run tests for MCP agent:
+```bash
+python mcp_agent.py --test
+```
+
+```bash
+uv run pytest test_mcp_agent.py -v
+```
+
+Or to run all tests in the project:
+```bash
+uv run pytest -v
+```
+
 ### Research Agent
 Run the research agent with calculator and web search capabilities:
 ```bash

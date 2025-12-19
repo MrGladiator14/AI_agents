@@ -1,0 +1,121 @@
+pipeline {
+    agent any
+    
+    environment {
+        // Common environment variables
+        PROJECT = 'langraph-project'
+        PYTHONPATH = "${WORKSPACE}:${WORKSPACE}/langraphProjects"
+        PYTHON_VERSION = '3.12'
+        OPENAI_API_KEY="${env.OPENAI_API_KEY}"
+    }
+
+    triggers {
+        pollSCM('* * * * *')
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo "Checking out code from SCM"
+                checkout scm
+            }
+        }
+        
+        stage('Setup Python Environment') {
+            steps {
+                echo 'Setting up Python virtual environment...'
+                sh '''
+                    set -e
+                    
+                    # Install uv (fast Python package/dependency manager)
+                    curl -LsSf https://astral.sh/uv/install.sh | sh
+                    UV="$HOME/.local/bin/uv"
+
+                    # Avoid Azure Files limitations by storing uv data outside Jenkins HOME
+                    export UV_PYTHON_INSTALL_DIR=/tmp/uv/python
+                    export XDG_DATA_HOME=/tmp/.local/share
+                    export XDG_CACHE_HOME=/tmp/.cache
+                    
+                    # Ensure exact Python version matches project (e.g., 3.12)
+                    "$UV" python install ${PYTHON_VERSION}
+                    
+                    # Create venv with the requested Python version
+                    "$UV" venv --python ${PYTHON_VERSION} /tmp/venv-${BUILD_NUMBER}
+                    
+                    # Show versions for debugging
+                    /tmp/venv-${BUILD_NUMBER}/bin/python --version
+                    "$UV" --version
+                '''
+            }
+        }
+        
+        stage('Install Dependencies') {
+            steps {
+                echo '📥 Installing project dependencies...'
+                sh '''
+                    set -e
+                    VENV_PY="/tmp/venv-${BUILD_NUMBER}/bin/python"
+                    UV="$HOME/.local/bin/uv"
+
+                    # Ensure uv also uses temp storage during dependency resolution
+                    export XDG_DATA_HOME=/tmp/.local/share
+                    export XDG_CACHE_HOME=/tmp/.cache
+                    
+                    # Create a sanitized requirements file removing local-only and OS-specific deps
+                    SAN_REQ=$(mktemp)
+                    cat requirements.txt \
+                      | sed -E '/^[[:space:]]*langraphProjects(==.*)?[[:space:]]*$/d' \
+                      | sed -E '/^[[:space:]]*pywin32(==.*)?[[:space:]]*$/d' \
+                      > "$SAN_REQ"
+                    
+                    # Install third-party dependencies with uv into the venv interpreter
+                    "$UV" pip install --python "$VENV_PY" -r "$SAN_REQ"
+                    
+                    # Ensure test tooling is available
+                    "$UV" pip install --python "$VENV_PY" pytest pytest-cov
+                    
+                    # Skip editable install; rely on PYTHONPATH set at pipeline level
+                    echo "Using PYTHONPATH=${PYTHONPATH} for local package imports"
+                '''
+            }
+        }
+        
+        stage('Run Tests') {
+            steps {
+                echo '🧪 Running pytest tests...'
+                sh '''
+                    set -e
+                    . /tmp/venv-${BUILD_NUMBER}/bin/activate
+                    mkdir -p test-results
+                    # Run tests from the root directory and collect coverage for all Python files
+                    python -m pytest . \
+                        --verbose \
+                        --junit-xml=test-results/results.xml \
+                        --cov=. \
+                        --cov-report=xml:coverage.xml \
+                        --cov-report=html:htmlcov \
+                        --cov-report=term \
+                        || echo "Tests completed with exit code $?"
+                '''
+                
+                // Archive test results and coverage reports
+                echo '📊 Archiving test results...'
+                junit allowEmptyResults: true, testResults: 'test-results/*.xml'
+                archiveArtifacts artifacts: 'coverage.xml,htmlcov/**,test-results/**/*.xml', allowEmptyArchive: true
+            }
+        }
+    }
+    
+    post {
+        always {
+            // Clean up venv after archiving artifacts
+            sh 'rm -rf /tmp/venv-${BUILD_NUMBER} /tmp/uv /tmp/.local /tmp/.cache'
+        }
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed!'
+        }
+    }
+}
