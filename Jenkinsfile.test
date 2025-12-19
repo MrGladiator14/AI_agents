@@ -84,12 +84,13 @@ pipeline {
             steps {
                 echo '🧪 Running pytest tests...'
                 sh '''
+                    UV="$HOME/.local/bin/uv"
                     "$UV" sync
                     set -e
                     . /tmp/venv-${BUILD_NUMBER}/bin/activate
                     mkdir -p test-results
                     # Run tests from the root directory and collect coverage for all Python files
-                    python -m pytest . \
+                    uv run -m pytest . \
                         --verbose \
                         --junit-xml=test-results/results.xml \
                         --cov=. \
