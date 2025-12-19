@@ -84,6 +84,7 @@ pipeline {
             steps {
                 echo '🧪 Running pytest tests...'
                 sh '''
+                    "$UV" sync
                     set -e
                     . /tmp/venv-${BUILD_NUMBER}/bin/activate
                     mkdir -p test-results
